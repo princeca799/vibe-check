@@ -3,13 +3,15 @@ import cors from 'cors';
 import Sentiment from 'sentiment';
 
 const app = express();
-const PORT = 3001;
+const PORT = process.env.PORT || 3001;
 const sentiment = new Sentiment();
 
 app.use(cors());
 app.use(express.json());
 
-// Interface definitions
+// ---------------------------------------------------------
+// Types & Interfaces
+// ---------------------------------------------------------
 export interface PostSentiment {
     id: string;
     title: string;
@@ -19,7 +21,52 @@ export interface PostSentiment {
 }
 
 // ---------------------------------------------------------
-// Mock Data Generator (50 Posts)
+// Reddit OAuth Configuration
+// Replace with environment variables or your actual credentials
+// ---------------------------------------------------------
+const REDDIT_CLIENT_ID = process.env.REDDIT_CLIENT_ID || '';
+const REDDIT_CLIENT_SECRET = process.env.REDDIT_CLIENT_SECRET || '';
+const USER_AGENT = process.env.REDDIT_USER_AGENT || 'web:vibe-check-app:v1.0.0 (by /u/YOUR_REDDIT_USERNAME)';
+
+let cachedToken: string | null = null;
+let tokenExpirationTime = 0;
+
+/**
+ * Retrieves a cached OAuth token or requests a new one from Reddit.
+ */
+async function getRedditAccessToken(): Promise<string> {
+    const now = Date.now();
+
+    // Return cached token if valid (with 60s buffer)
+    if (cachedToken && now < tokenExpirationTime - 60000) {
+        return cachedToken;
+    }
+
+    const authHeader = Buffer.from(`${REDDIT_CLIENT_ID}:${REDDIT_CLIENT_SECRET}`).toString('base64');
+
+    const tokenResponse = await fetch('https://www.reddit.com/api/v1/access_token', {
+        method: 'POST',
+        headers: {
+            'Authorization': `Basic ${authHeader}`,
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'User-Agent': USER_AGENT,
+        },
+        body: 'grant_type=client_credentials',
+    });
+
+    if (!tokenResponse.ok) {
+        throw new Error(`Failed to obtain access token: ${tokenResponse.statusText}`);
+    }
+
+    const tokenData = await tokenResponse.json();
+    cachedToken = tokenData.access_token;
+    tokenExpirationTime = Date.now() + tokenData.expires_in * 1000;
+
+    return cachedToken as string;
+}
+
+// ---------------------------------------------------------
+// Mock Data Generator (50 Posts Fallback)
 // ---------------------------------------------------------
 const sampleTopics = [
     'React 19 release looks promising for web performance!',
@@ -51,31 +98,38 @@ function generateMockPosts(subreddit: string): PostSentiment[] {
 }
 
 // ---------------------------------------------------------
-// API Endpoint
+// Route Handler
 // ---------------------------------------------------------
 app.get('/api/subreddit/:subreddit', async (req: Request, res: Response) => {
     const subreddit = req.params.subreddit as string;
-    const useReal = req.query.useReal === 'true';
+    const useReal = req.query.useReal !== 'true'; // defaults to true unless explicitly disabled
 
-    // Return mock data by default or if real fetch fails
+    // Return mock data directly if useReal=false query parameter is passed
     if (!useReal) {
-        console.log(`Returning 50 mock posts for r/${subreddit}`);
+        console.log(`[Mock Mode] Returning 50 generated posts for r/${subreddit}`);
         return res.json({ posts: generateMockPosts(subreddit) });
     }
 
     try {
-        console.log(`Fetching real data for r/${subreddit} from Reddit API...`);
-        const response = await fetch(`https://www.reddit.com/r/${subreddit}/hot.json?limit=50`, {
+        console.log(`Fetching r/${subreddit} from oauth.reddit.com...`);
+        const token = await getRedditAccessToken();
+
+        const response = await fetch(`https://oauth.reddit.com/r/${subreddit}/hot.json?limit=50`, {
             headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) SentimentApp/1.0.0',
+                'Authorization': `Bearer ${token}`,
+                'User-Agent': USER_AGENT,
             },
         });
 
         if (!response.ok) {
-            throw new Error(`Reddit API returned status ${response.status}`);
+            throw new Error(`Reddit API returned HTTP ${response.status}`);
         }
 
         const data = await response.json();
+
+        if (!data?.data?.children) {
+            throw new Error('Invalid response structure or empty subreddit.');
+        }
 
         const posts: PostSentiment[] = data.data.children.map((child: any) => {
             const title = child.data.title;
@@ -92,11 +146,14 @@ app.get('/api/subreddit/:subreddit', async (req: Request, res: Response) => {
 
         return res.json({ posts });
     } catch (error) {
-        console.warn(`Failed to fetch real data from Reddit. Falling back to mock data. Error:`, error);
+        console.warn(`OAuth fetch failed for r/${subreddit}. Falling back to mock data. Error:`, error);
         return res.json({ posts: generateMockPosts(subreddit) });
     }
 });
 
+// ---------------------------------------------------------
+// Server Start
+// ---------------------------------------------------------
 app.listen(PORT, () => {
     console.log(`Server running on http://localhost:${PORT}`);
 });
