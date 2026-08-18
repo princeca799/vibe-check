@@ -4,12 +4,13 @@ import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import SearchIcon from '@mui/icons-material/Search';
 
-export default function InputWithIcon() {
+export default function InputWithIcon(props:any) {
     const sxId = React.useId();
     const [searchTerm, setSearchTerm] = React.useState('');
 
     const handleSearch = (value: string) => {
         console.log('Searching for:', value);
+        props.onSearch(value)
     };
 
     const handleKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
