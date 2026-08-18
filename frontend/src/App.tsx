@@ -1,11 +1,10 @@
 import './App.css'
+import Menu from './components/Menu'
 
 function App() {
 
   return (
-    <div>
-      Start
-    </div>
+   <Menu />
   )
 }
 
