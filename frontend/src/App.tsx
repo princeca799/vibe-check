@@ -31,7 +31,23 @@ function App() {
 
 
 const fetchSubredditSentiments = async (subreddit: string) => {
-  //logic
+    setLoading(true);
+    try {
+        // Calls express endpoint directly (no CORS errors, mock enabled)
+        const response = await fetch(`http://localhost:3001/api/subreddit/${subreddit}`);
+        
+        if (!response.ok) {
+            throw new Error('Failed to fetch data from backend server.');
+        }
+
+        const data = await response.json();
+        setPosts(data.posts);
+        console.log(data.posts)
+    } catch (error) {
+        console.error('Error fetching posts:', error);
+    } finally {
+        setLoading(false);
+    }
 };
 
   return (
