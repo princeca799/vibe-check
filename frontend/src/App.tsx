@@ -2,7 +2,9 @@ import { useState, useMemo } from 'react';
 import './App.css';
 import Menu from './components/Menu';
 import Search from './components/Search';
-import { Box } from '@mui/material';
+import VibeSummary from './components/VibeSummary';
+import SentimentChart from './components/SentimentChart';
+import { Box, Container, CircularProgress } from '@mui/material';
 import { type PostSentiment, type SentimentSummary } from './types';
 
 function App() {
@@ -29,31 +31,43 @@ function App() {
     };
   }, [posts]);
 
-
-const fetchSubredditSentiments = async (subreddit: string) => {
+  const fetchSubredditSentiments = async (subreddit: string) => {
     setLoading(true);
     try {
-        // Calls express endpoint directly (no CORS errors, mock enabled)
-        const response = await fetch(`http://localhost:3001/api/subreddit/${subreddit}`);
-        
-        if (!response.ok) {
-            throw new Error('Failed to fetch data from backend server.');
-        }
+      const response = await fetch(`http://localhost:3001/api/subreddit/${subreddit}`);
 
-        const data = await response.json();
-        setPosts(data.posts);
-        console.log(data.posts)
+      if (!response.ok) {
+        throw new Error('Failed to fetch data from backend server.');
+      }
+
+      const data = await response.json();
+      setPosts(data.posts);
     } catch (error) {
-        console.error('Error fetching posts:', error);
+      console.error('Error fetching posts:', error);
     } finally {
-        setLoading(false);
+      setLoading(false);
     }
-};
+  };
 
   return (
     <Box>
       <Menu />
-      <Search onSearch={fetchSubredditSentiments} />
+      <Container maxWidth="md" sx={{ py: 4 }}>
+        <Search onSearch={fetchSubredditSentiments} loading={loading} />
+
+        {loading && (
+          <Box sx={{ display: 'flex', justifyContent: 'center', my: 6 }}>
+            <CircularProgress />
+          </Box>
+        )}
+
+        {!loading && posts.length > 0 && (
+          <Box sx={{ mt: 4 }}>
+            <VibeSummary summary={sentimentSummary} />
+            <SentimentChart posts={posts} />
+          </Box>
+        )}
+      </Container>
     </Box>
   );
 }
