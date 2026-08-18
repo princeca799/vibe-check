@@ -34,8 +34,11 @@ function App() {
   const fetchSubredditSentiments = async (subreddit: string) => {
     setLoading(true);
     try {
-      const response = await fetch(`http://localhost:3001/api/subreddit/${subreddit}`);
+      const API_URL = import.meta.env.PROD
+  ? 'https://vibe-check-lctu.onrender.com'
+  : 'http://localhost:3001';
 
+const response = await fetch(`${API_URL}/api/subreddit/${subreddit}`);
       if (!response.ok) {
         throw new Error('Failed to fetch data from backend server.');
       }
